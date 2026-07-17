@@ -668,7 +668,9 @@ export function getAdsByBulkJob(jobId: string): Ad[] {
     WHERE c.job_id = ?
     ORDER BY a.advertiser_name, a.scraped_at DESC
   `).all(jobId) as Record<string, unknown>[];
-  return rows.map(rowToAd);
+  const ads = rows.map(rowToAd);
+  attachTags(ads); // so the bulk ads export's Tags column is populated like the search export
+  return ads;
 }
 
 export function getBulkJobCompanies(jobId: string): BulkCompany[] {

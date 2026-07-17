@@ -36,6 +36,11 @@ interface AdCardProps {
 
 function MediaPreview({ ad }: { ad: Ad }) {
   const [idx, setIdx] = useState(0);
+  // Meta's CDN media URLs are signed and expire (days–weeks after scraping), and
+  // some ads never carried a media URL at all. In both cases the load fails — so
+  // track failures per-URL and show an explicit "unavailable" tile instead of a
+  // silent blank box, with a hint to open the still-live ad on Meta.
+  const [failedUrls, setFailedUrls] = useState<Set<string>>(() => new Set());
 
   // Prefer still images. But many ads — especially video carousels — have an
   // empty media_urls and only carry video URLs (top-level or per card). For
@@ -51,16 +56,24 @@ function MediaPreview({ ad }: { ad: Ad }) {
     ad.media_type === 'multi_video' ||
     slides.some((s) => s.kind === 'video');
 
-  if (!slides.length) {
+  const safeIdx = slides.length ? Math.min(idx, slides.length - 1) : 0;
+  const cur = slides[safeIdx];
+  const curFailed = !cur || failedUrls.has(cur.url);
+
+  // No media at all, or the current slide's URL failed/expired → clear fallback.
+  if (curFailed) {
     return (
-      <div className="w-full aspect-video bg-muted/40 flex items-center justify-center">
-        <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+      <div className="w-full aspect-video bg-muted/40 flex flex-col items-center justify-center gap-1.5 text-muted-foreground/50">
+        <ImageIcon className="w-8 h-8" />
+        <span className="text-[10px] font-medium">
+          {slides.length ? 'Preview expired' : 'No preview'}
+          {ad.ad_snapshot_url ? ' · open on Meta' : ''}
+        </span>
       </div>
     );
   }
 
-  const safeIdx = Math.min(idx, slides.length - 1);
-  const cur = slides[safeIdx];
+  const markFailed = (url: string) => setFailedUrls((s) => new Set(s).add(url));
 
   return (
     <div className="relative w-full aspect-video bg-black/60 overflow-hidden group/media">
@@ -73,7 +86,7 @@ function MediaPreview({ ad }: { ad: Ad }) {
           preload="metadata"
           muted
           playsInline
-          onError={(e) => { (e.target as HTMLVideoElement).style.opacity = '0'; }}
+          onError={() => markFailed(cur.url)}
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
@@ -82,7 +95,7 @@ function MediaPreview({ ad }: { ad: Ad }) {
           alt=""
           className="w-full h-full object-cover transition-transform duration-300 group-hover/media:scale-[1.02]"
           loading="lazy"
-          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+          onError={() => markFailed(cur.url)}
         />
       )}
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Ad } from '@/types/ads';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import { Download, ExternalLink, Copy, ChevronLeft, ChevronRight, MapPin, Users, Target, ImageDown, Loader2, AlertTriangle } from 'lucide-react';
+import { Download, ExternalLink, Copy, ChevronLeft, ChevronRight, MapPin, Users, Target, ImageDown, Loader2, AlertTriangle, ImageIcon } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -18,6 +18,23 @@ interface AdModalProps {
   ad: Ad | null;
   open: boolean;
   onClose: () => void;
+}
+
+// An <img> that, when its (often expired) Meta CDN URL fails to load, swaps to a
+// clear "expired" tile instead of a broken-image glyph. Takes the RAW url and
+// proxies it itself. Meta media links are signed and time-limited.
+function FallbackImage({ src, alt, className }: { src?: string; alt: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) {
+    return (
+      <div className="w-full h-full min-h-40 flex flex-col items-center justify-center gap-1.5 bg-muted/40 text-muted-foreground/50">
+        <ImageIcon className="w-8 h-8" />
+        <span className="text-[11px] font-medium">Preview expired · open on Meta</span>
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={mediaSrc(src)} alt={alt} className={className} onError={() => setFailed(true)} />;
 }
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -157,9 +174,8 @@ export function AdModal({ ad, open, onClose }: AdModalProps) {
                 <div className="space-y-3">
                   <div className="relative bg-muted rounded-xl overflow-hidden aspect-video">
                     {ad.carousel_cards[carouselIdx]?.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={mediaSrc(ad.carousel_cards[carouselIdx].image_url)}
+                      <FallbackImage
+                        src={ad.carousel_cards[carouselIdx].image_url}
                         alt={`Slide ${carouselIdx + 1}`}
                         className="w-full h-full object-contain"
                       />
@@ -243,8 +259,7 @@ export function AdModal({ ad, open, onClose }: AdModalProps) {
               ) : thumbSrc ? (
                 <div className="space-y-3">
                   <div className="relative bg-muted rounded-xl overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={mediaSrc(thumbSrc)} alt="Ad creative" className="w-full max-h-96 object-contain" />
+                    <FallbackImage src={thumbSrc} alt="Ad creative" className="w-full max-h-96 object-contain" />
                   </div>
                   <Button size="sm" variant="outline" className="h-8 text-xs" onClick={() => handleDownloadOne(thumbSrc)} disabled={dlItem}>
                     {dlItem ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
