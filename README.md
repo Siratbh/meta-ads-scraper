@@ -122,6 +122,9 @@ npm run build
 npm start
 ```
 
+> **Binds to `127.0.0.1` by default — this is a single-user tool with no auth.**
+> There are no accounts and no authentication: every route (scraping, bulk jobs, tag/collection edits, the webhook test-fire) is open to whoever can reach the server. That's fine on your own machine, which is why `npm run dev` and `npm start` bind to loopback (`-H 127.0.0.1`) so nothing is exposed to your network. **If you deliberately run it on a VM/container and need remote access, change the host (`next start -H 0.0.0.0`) — but only behind your own auth layer** (a reverse proxy with a password, a VPN, or an SSH tunnel), never open to the internet.
+
 > **Deployment caveat — run this as a single long-lived Node process.**
 > The app is designed to run on one persistent server (local machine, a VM, or a single container). The rate limiter, adaptive backoff, the Meta-API health registry, and the warm typeahead browser all hold **in-memory, per-process** state. On a serverless platform (e.g. Vercel functions) where each request can hit a fresh, isolated instance, that shared state stops being global: every cold instance starts with an empty token bucket and no backoff history, so the global rate limiting and "Meta changed their API" tracking no longer hold across requests. Playwright driving a headless Chromium also doesn't fit typical serverless function limits. If you move off a single process, you'd need to externalise that state (e.g. Redis for the limiter/health) and run the browser on a dedicated worker.
 

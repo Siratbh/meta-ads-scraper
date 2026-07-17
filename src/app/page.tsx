@@ -20,11 +20,12 @@ import { CompanyDrawer } from '@/components/ads/CompanyDrawer';
 import { AdvertiserSearch } from '@/components/ads/AdvertiserSearch';
 import { ResultsFilterBar, EMPTY_RESULT_FILTERS, type ResultFilters } from '@/components/ads/ResultsFilterBar';
 import { Pagination } from '@/components/ads/Pagination';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { adsToCsv, exportFilename } from '@/lib/exportCsv';
 import type { Ad, SearchParams, Collection, Tag, BulkCompany, BulkJob, AdvertiserSuggestion, SearchSession } from '@/types/ads';
 import {
   Search, BookMarked, Users, Zap, FolderPlus, Download,
-  Square, PanelLeftOpen, AlertTriangle, X, Webhook, Pause,
+  Square, PanelLeftOpen, AlertTriangle, X, Webhook, Pause, ArrowLeft,
 } from 'lucide-react';
 
 const DEFAULT_PARAMS: SearchParams = {
@@ -551,6 +552,7 @@ export default function HomePage() {
           </Tabs>
 
           <div className="flex items-center gap-2 ml-auto">
+            <ThemeToggle />
             {tab === 'search' && (
               <>
                 <Button size="sm" variant="outline" onClick={() => openHooks()} className="h-8 text-xs">
@@ -785,7 +787,7 @@ export default function HomePage() {
                         onClick={() => setActiveCollection(activeCollection === c.id ? null : c.id)}
                         className={`px-3 py-1 rounded-full text-xs border transition-colors flex items-center gap-1.5 ${activeCollection === c.id ? 'bg-primary text-primary-foreground border-primary' : 'hover:bg-muted border-border'}`}
                       >
-                        <span className="w-2 h-2 rounded-full" style={{ background: c.color || '#6366f1' }} />
+                        <span className="w-2 h-2 rounded-full" style={{ background: c.color || '#ef4444' }} />
                         {c.name} {c.ad_count != null ? `(${c.ad_count})` : ''}
                       </button>
                     ))}
@@ -806,8 +808,8 @@ export default function HomePage() {
                         onClick={() => setActiveTag(activeTag === t.id ? null : t.id)}
                         className="px-2.5 py-1 rounded-full text-xs border transition-colors flex items-center gap-1.5"
                         style={activeTag === t.id
-                          ? { background: t.color || '#6366f1', borderColor: t.color || '#6366f1', color: '#fff' }
-                          : { borderColor: (t.color || '#6366f1') + '55', color: t.color || '#a5b4fc' }}
+                          ? { background: t.color || '#ef4444', borderColor: t.color || '#ef4444', color: '#fff' }
+                          : { borderColor: (t.color || '#ef4444') + '55', color: t.color || '#fca5a5' }}
                       >
                         {t.name} {t.ad_count != null ? `(${t.ad_count})` : ''}
                       </button>
@@ -849,7 +851,7 @@ export default function HomePage() {
                         onClick={() => { bulkAbort.current?.abort(); streamingRef.current = null; setBulkJobId(null); setDedupCount(0); }}
                         className="h-8 text-xs"
                       >
-                        ← All Jobs
+                        <ArrowLeft className="w-3.5 h-3.5 mr-1" /> All Jobs
                       </Button>
                       {bulkJob && (
                         <BulkResultsTable

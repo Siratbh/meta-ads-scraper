@@ -6,7 +6,7 @@ import type { Tag } from '@/types/ads';
 import { Tag as TagIcon, Plus, X, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const TAG_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
+const TAG_COLORS = ['#ef4444', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6366f1', '#14b8a6'];
 
 interface TagEditorProps {
   adId: string;
@@ -65,7 +65,7 @@ export function TagEditor({ adId }: TagEditorProps) {
         <span
           key={t.id}
           className="group/tag inline-flex items-center gap-1 pl-2 pr-1 h-6 rounded-full text-xs font-medium border"
-          style={{ borderColor: (t.color || '#6366f1') + '66', background: (t.color || '#6366f1') + '1f', color: t.color || '#a5b4fc' }}
+          style={{ borderColor: (t.color || '#ef4444') + '66', background: (t.color || '#ef4444') + '1f', color: t.color || '#fca5a5' }}
         >
           {t.name}
           <button onClick={() => removeTag(t)} className="rounded-full hover:bg-black/20 p-0.5 transition-colors" title="Remove tag">
@@ -101,7 +101,7 @@ export function TagEditor({ adId }: TagEditorProps) {
                   onClick={() => addTag(t)}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs hover:bg-accent transition-colors text-left"
                 >
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.color || '#6366f1' }} />
+                  <span className="w-2 h-2 rounded-full shrink-0" style={{ background: t.color || '#ef4444' }} />
                   <span className="truncate flex-1">{t.name}</span>
                   {t.ad_count != null && <span className="text-muted-foreground/60">{t.ad_count}</span>}
                 </button>

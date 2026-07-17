@@ -8,7 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Collection, Tag } from '@/types/ads';
 import { Plus, Trash2, FolderOpen, Tag as TagIcon, BarChart3 } from 'lucide-react';
 
-const COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6'];
+const COLORS = ['#ef4444', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6366f1', '#14b8a6'];
 
 interface CollectionsPanelProps {
   open: boolean;
@@ -77,7 +77,7 @@ export function CollectionsPanel({ open, onClose, collections, tags, onCreate, o
                 {collections.map((c) => (
                   <div key={c.id} className="flex items-center justify-between px-3 py-2 border border-border/60 rounded-lg">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color || '#6366f1' }} />
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: c.color || '#ef4444' }} />
                       <span className="text-sm font-medium truncate">{c.name}</span>
                       {c.ad_count != null && <span className="text-xs text-muted-foreground">({c.ad_count})</span>}
                     </div>
@@ -112,7 +112,7 @@ export function CollectionsPanel({ open, onClose, collections, tags, onCreate, o
                   <span
                     key={t.id}
                     className="group/tag inline-flex items-center gap-1 pl-2.5 pr-1 h-7 rounded-full text-xs font-medium border"
-                    style={{ borderColor: (t.color || '#6366f1') + '66', background: (t.color || '#6366f1') + '1f', color: t.color || '#a5b4fc' }}
+                    style={{ borderColor: (t.color || '#ef4444') + '66', background: (t.color || '#ef4444') + '1f', color: t.color || '#fca5a5' }}
                   >
                     {t.name}{t.ad_count != null ? ` (${t.ad_count})` : ''}
                     <button onClick={() => onDeleteTag(t.id)} className="rounded-full hover:bg-black/20 p-0.5 transition-colors" title="Delete tag">

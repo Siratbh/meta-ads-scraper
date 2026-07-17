@@ -89,7 +89,29 @@ function Segmented<T extends string>({ value, options, onChange }: {
   );
 }
 
-// Wrapping pill group for single-select with more options
+// On-design single-select dropdown for filters with 3+ options (a bare pill row
+// scales poorly and drifts off the design system). Segmented is kept only for the
+// 2–3 option toggles above.
+function FilterSelect<T extends string>({ value, options, onChange, placeholder }: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+  placeholder?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as T)}>
+      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={placeholder} /></SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+// Wrapping pill group — kept for the compact numeric "max ads" chooser, where
+// seeing every option at a glance is the point and each label is 2–3 chars.
 function PillGroup<T extends string>({ value, options, onChange }: {
   value: T;
   options: { value: T; label: string }[];
@@ -223,7 +245,7 @@ export function FiltersPanel({ params, onChange, onReset, onClose, collections, 
         <Separator className="opacity-30" />
 
         <Group label="Media type">
-          <PillGroup
+          <FilterSelect
             value={params.ad_type || 'ALL'}
             options={MEDIA_OPTS}
             onChange={(v) => onChange({ ad_type: v === 'ALL' ? undefined : (v as SearchParams['ad_type']) })}
@@ -231,7 +253,7 @@ export function FiltersPanel({ params, onChange, onReset, onClose, collections, 
         </Group>
 
         <Group label="Platform">
-          <PillGroup
+          <FilterSelect
             value={params.platform || 'ALL'}
             options={PLATFORM_OPTS}
             onChange={(v) => onChange({ platform: v === 'ALL' ? undefined : (v as SearchParams['platform']) })}
@@ -239,7 +261,7 @@ export function FiltersPanel({ params, onChange, onReset, onClose, collections, 
         </Group>
 
         <Group label="Category">
-          <PillGroup
+          <FilterSelect
             value={params.category || 'ALL'}
             options={CATEGORY_OPTS}
             onChange={(v) => onChange({ category: v as SearchParams['category'] })}
@@ -305,7 +327,7 @@ export function FiltersPanel({ params, onChange, onReset, onClose, collections, 
                     )}
                   >
                     <span className="flex items-center gap-2 min-w-0">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.color || '#6366f1' }} />
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: c.color || '#ef4444' }} />
                       <span className="truncate">{c.name}</span>
                     </span>
                     {c.ad_count != null && <span className="text-muted-foreground/60">{c.ad_count}</span>}
