@@ -5,10 +5,10 @@ import type { Ad } from '@/types/ads';
 export const BOM = '﻿';
 
 export const AD_CSV_HEADER = [
-  'ID', 'Advertiser', 'Status', 'Media Type', 'Ad Copy', 'Headline', 'CTA',
+  'ID', 'Advertiser', 'Advertiser Page ID', 'Status', 'Category', 'Media Type', 'Ad Copy', 'Headline', 'CTA',
   'Landing URL', 'Image URLs', 'Video URLs', 'Platforms', 'Started', 'Stopped', 'Days Running',
   'Spend Min', 'Spend Max', 'Impressions Min', 'Impressions Max',
-  'Funding Entity', 'Ad Library URL', 'Country', 'Language', 'Scraped At',
+  'Funding Entity', 'Ad Library URL', 'Country', 'Language', 'Tags', 'Scraped At',
   'Details Fetched', 'Total Reach (EU)', 'Beneficiary', 'Payer',
   'Top Regions', 'Age/Gender Breakdown',
 ].map((h) => `"${h}"`).join(',');
@@ -29,7 +29,9 @@ export function adToCsvRow(ad: Ad): string {
   const fields = [
     ad.id,
     ad.advertiser_name,
+    ad.advertiser_page_id || '',
     ad.status,
+    ad.category || '',
     ad.media_type,
     ad.body_variants.join(' | '),
     ad.headline || '',
@@ -49,6 +51,7 @@ export function adToCsvRow(ad: Ad): string {
     ad.ad_snapshot_url || '',
     ad.country || '',
     ad.language || '',
+    (ad.tags ?? []).map((t) => t.name).join(', '),
     ad.scraped_at,
     // "See ad details" / EU transparency
     ad.detail_fetched ? 'yes' : '',

@@ -359,7 +359,22 @@ export async function* scrapeAds(
       // No button at all is normal (non-EU/non-political ads have no details) —
       // leave the signal untouched rather than raise a false alarm.
     }
+    // Stamp the scrape's own context onto every ad. Meta's per-ad payload doesn't
+    // carry the country the search was run for, and only rarely carries a language
+    // — so without this the ads.country/language columns are always blank even
+    // though we know both from the request. Category is likewise the requested
+    // filter (the payload never echoes it back). Only overwrite when the request
+    // actually specified a value, so a real value already parsed off the ad wins.
+    const stampCountry = params.country && params.country !== 'ALL' ? params.country : undefined;
+    const stampCategory = params.category && params.category !== 'ALL' ? params.category : undefined;
+    function stamp(ad: Ad): Ad {
+      if (stampCountry && !ad.country) ad.country = stampCountry;
+      if (params.language && !ad.language) ad.language = params.language;
+      if (stampCategory && (!ad.category || ad.category === 'ALL')) ad.category = stampCategory;
+      return ad;
+    }
     async function out(batch: Ad[]): Promise<Ad[]> {
+      batch.forEach(stamp);
       if (detailSig && batch.length) {
         await enrichBatch(page, detailSig, batch).catch(() => {});
       }

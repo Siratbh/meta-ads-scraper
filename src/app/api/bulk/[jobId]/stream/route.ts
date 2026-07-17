@@ -96,6 +96,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ jobI
               ad_type: f.media_types && f.media_types.length === 1 ? f.media_types[0] : undefined,
               limit: 200,
               fetch_details: f.fetch_details,
+              // Carry the job's country through to the scrape so each ad is stamped
+              // with it (also aligns the Ad Library URL's country with the lookup).
+              country: f.country && f.country !== 'ALL' ? f.country : undefined,
             };
 
             // --- Resolve which Meta page (or keyword) to scrape ---
