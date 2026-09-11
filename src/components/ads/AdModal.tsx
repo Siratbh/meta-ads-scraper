@@ -3,10 +3,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Ad } from '@/types/ads';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
-import { Download, ExternalLink, Copy, ChevronLeft, ChevronRight, MapPin, Users, Target, ImageDown, Loader2, AlertTriangle, ImageIcon } from 'lucide-react';
+import { Download, ExternalLink, Copy, ChevronLeft, ChevronRight, MapPin, Users, Target, ImageDown, Loader2, AlertTriangle, ImageIcon, Save } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
@@ -18,6 +19,7 @@ interface AdModalProps {
   ad: Ad | null;
   open: boolean;
   onClose: () => void;
+  onNotesChange?: (id: string, notes: string) => void;
 }
 
 // An <img> that, when its (often expired) Meta CDN URL fails to load, swaps to a
@@ -46,10 +48,13 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function AdModal({ ad, open, onClose }: AdModalProps) {
+export function AdModal({ ad, open, onClose, onNotesChange }: AdModalProps) {
   const [carouselIdx, setCarouselIdx] = useState(0);
   const [dlMedia, setDlMedia] = useState(false);
   const [dlItem, setDlItem] = useState(false);
+  const [notesDraft, setNotesDraft] = useState(ad?.notes ?? '');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
 
   if (!ad) return null;
 
@@ -75,6 +80,28 @@ export function AdModal({ ad, open, onClose }: AdModalProps) {
     if (!ad || !url) return;
     setDlItem(true);
     try { await downloadSingleUrl(ad, url); } finally { setDlItem(false); }
+  }
+
+  async function saveNotes() {
+    if (!ad) return;
+    setNotesSaving(true);
+    setNotesError(null);
+    try {
+      const res = await fetch(`/api/ads/${ad.id}/notes`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: notesDraft }),
+      });
+      const data = await res.json().catch(() => ({})) as { notes?: unknown; error?: unknown };
+      if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Could not save notes');
+      const notes = typeof data.notes === 'string' ? data.notes : notesDraft.trim();
+      setNotesDraft(notes);
+      onNotesChange?.(ad.id, notes);
+    } catch {
+      setNotesError('Could not save notes. Try again.');
+    } finally {
+      setNotesSaving(false);
+    }
   }
 
   const hasDemo = ad.demographic_distribution.length > 0 || ad.region_distribution.length > 0;
@@ -159,9 +186,10 @@ export function AdModal({ ad, open, onClose }: AdModalProps) {
         </div>
 
         <Tabs defaultValue="creative" className="flex flex-col min-h-0">
-          <TabsList className="mx-6 mt-4 h-8">
+          <TabsList className="mx-6 mt-4 h-8 max-w-[calc(100%-3rem)] overflow-x-auto">
             <TabsTrigger value="creative" className="text-xs">Creative</TabsTrigger>
             <TabsTrigger value="copy" className="text-xs">Copy</TabsTrigger>
+            <TabsTrigger value="notes" className="text-xs">Notes</TabsTrigger>
             <TabsTrigger value="metadata" className="text-xs">Metadata</TabsTrigger>
             {hasDemo && <TabsTrigger value="demographics" className="text-xs">Demographics</TabsTrigger>}
             {hasTargeting && <TabsTrigger value="targeting" className="text-xs">Targeting</TabsTrigger>}
@@ -329,6 +357,31 @@ export function AdModal({ ad, open, onClose }: AdModalProps) {
                   </a>
                 </div>
               )}
+            </TabsContent>
+
+            {/* Swipefile notes */}
+            <TabsContent value="notes" className="p-6 mt-0">
+              <div className="max-w-2xl space-y-3">
+                <Textarea
+                  value={notesDraft}
+                  onChange={(e) => { setNotesDraft(e.target.value); setNotesError(null); }}
+                  placeholder="Write notes about this ad..."
+                  aria-label="Swipefile notes"
+                  maxLength={5000}
+                  rows={10}
+                  className="resize-y text-sm leading-relaxed"
+                />
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-muted-foreground tabular-nums">{notesDraft.length.toLocaleString()} / 5,000</span>
+                  <div className="flex items-center gap-3">
+                    {notesError && <span className="text-xs text-destructive">{notesError}</span>}
+                    <Button size="sm" onClick={saveNotes} disabled={notesSaving} className="h-8 text-xs">
+                      {notesSaving ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
+                      {notesSaving ? 'Saving...' : 'Save notes'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </TabsContent>
 
             {/* Metadata */}

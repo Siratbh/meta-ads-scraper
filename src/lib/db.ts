@@ -13,6 +13,7 @@ import type {
   WebhookConfig,
   SearchSession,
   SessionFireOn,
+  SavedAdvertiser,
 } from '@/types/ads';
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -61,6 +62,7 @@ function initSchema(db: Database.Database) {
       demographic_distribution TEXT DEFAULT '[]',
       region_distribution TEXT DEFAULT '[]',
       ad_snapshot_url TEXT,
+      notes TEXT,
       saved INTEGER DEFAULT 0,
       collection_id TEXT,
       session_id TEXT,
@@ -77,6 +79,16 @@ function initSchema(db: Database.Database) {
       fire_on TEXT DEFAULT 'save',
       created_at TEXT,
       last_activity TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS saved_advertisers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      page_id TEXT,
+      country TEXT NOT NULL DEFAULT 'US',
+      created_at TEXT NOT NULL,
+      last_scraped_at TEXT,
+      last_scrape_count INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS collections (
@@ -138,6 +150,8 @@ function initSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_ads_status ON ads(status);
     CREATE INDEX IF NOT EXISTS idx_ads_scraped ON ads(scraped_at);
     CREATE INDEX IF NOT EXISTS idx_ads_job ON ads(scrape_job_id);
+    CREATE INDEX IF NOT EXISTS idx_saved_advertisers_name ON saved_advertisers(name COLLATE NOCASE);
+    CREATE INDEX IF NOT EXISTS idx_saved_advertisers_page ON saved_advertisers(page_id);
     CREATE INDEX IF NOT EXISTS idx_bulk_companies_job ON bulk_job_companies(job_id);
   `);
 
@@ -145,6 +159,9 @@ function initSchema(db: Database.Database) {
   const existingCols = (db.pragma('table_info(ads)') as { name: string }[]).map((c) => c.name);
   if (!existingCols.includes('video_urls')) {
     db.exec(`ALTER TABLE ads ADD COLUMN video_urls TEXT DEFAULT '[]'`);
+  }
+  if (!existingCols.includes('notes')) {
+    db.exec(`ALTER TABLE ads ADD COLUMN notes TEXT`);
   }
   const deepCols: Array<[string, string]> = [
     ['deep_search_done', 'INTEGER DEFAULT 0'],
@@ -192,6 +209,11 @@ function initSchema(db: Database.Database) {
 
 export function upsertAd(ad: Ad) {
   const db = getDb();
+  const existing = db.prepare('SELECT saved, collection_id, notes FROM ads WHERE id = ?').get(ad.id) as {
+    saved?: number;
+    collection_id?: string | null;
+    notes?: string | null;
+  } | undefined;
   db.prepare(`
     INSERT OR REPLACE INTO ads (
       id, advertiser_name, advertiser_page_id, body_variants, headline,
@@ -199,7 +221,7 @@ export function upsertAd(ad: Ad) {
       status, category, started_at, stopped_at, days_running, country, language,
       spend_min, spend_max, spend_currency, impressions_min, impressions_max,
       funding_entity, demographic_distribution, region_distribution,
-      ad_snapshot_url, saved, collection_id, session_id, scraped_at, scrape_job_id,
+      ad_snapshot_url, notes, saved, collection_id, session_id, scraped_at, scrape_job_id,
       deep_search_done, targeting_age_min, targeting_age_max, targeting_gender,
       targeting_locations, targeting_interests, policy_status,
       detail_fetched, total_reach, beneficiary, payer
@@ -209,7 +231,7 @@ export function upsertAd(ad: Ad) {
       @status, @category, @started_at, @stopped_at, @days_running, @country, @language,
       @spend_min, @spend_max, @spend_currency, @impressions_min, @impressions_max,
       @funding_entity, @demographic_distribution, @region_distribution,
-      @ad_snapshot_url, @saved, @collection_id, @session_id, @scraped_at, @scrape_job_id,
+      @ad_snapshot_url, @notes, @saved, @collection_id, @session_id, @scraped_at, @scrape_job_id,
       @deep_search_done, @targeting_age_min, @targeting_age_max, @targeting_gender,
       @targeting_locations, @targeting_interests, @policy_status,
       @detail_fetched, @total_reach, @beneficiary, @payer
@@ -223,7 +245,8 @@ export function upsertAd(ad: Ad) {
     platforms: JSON.stringify(ad.platforms),
     demographic_distribution: JSON.stringify(ad.demographic_distribution),
     region_distribution: JSON.stringify(ad.region_distribution),
-    saved: ad.saved ? 1 : 0,
+    notes: ad.notes ?? existing?.notes ?? null,
+    saved: existing?.saved === 1 || ad.saved ? 1 : 0,
     advertiser_page_id: ad.advertiser_page_id ?? null,
     session_id: ad.session_id ?? null,
     headline: ad.headline ?? null,
@@ -241,7 +264,7 @@ export function upsertAd(ad: Ad) {
     impressions_max: ad.impressions_max ?? null,
     funding_entity: ad.funding_entity ?? null,
     ad_snapshot_url: ad.ad_snapshot_url ?? null,
-    collection_id: ad.collection_id ?? null,
+    collection_id: ad.collection_id ?? existing?.collection_id ?? null,
     scrape_job_id: ad.scrape_job_id ?? null,
     deep_search_done: ad.deep_search_done ? 1 : 0,
     targeting_age_min: ad.targeting_age_min ?? null,
@@ -296,7 +319,7 @@ export function queryAds(params: {
   const bindings: Record<string, unknown> = {};
 
   if (params.search) {
-    conditions.push(`(advertiser_name LIKE @search OR body_variants LIKE @search OR headline LIKE @search)`);
+    conditions.push(`(advertiser_name LIKE @search OR body_variants LIKE @search OR headline LIKE @search OR notes LIKE @search)`);
     bindings.search = `%${params.search}%`;
   }
   if (params.advertiser) {
@@ -356,6 +379,12 @@ export function setAdSaved(id: string, saved: boolean, collectionId?: string) {
   db.prepare('UPDATE ads SET saved = ?, collection_id = ? WHERE id = ?').run(saved ? 1 : 0, collectionId ?? null, id);
 }
 
+export function updateAdNotes(id: string, notes: string): boolean {
+  const db = getDb();
+  const result = db.prepare('UPDATE ads SET notes = ? WHERE id = ?').run(notes, id);
+  return result.changes > 0;
+}
+
 export function getAdsByAdvertiser(advertiserName: string): Ad[] {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM ads WHERE advertiser_name LIKE ? ORDER BY scraped_at DESC').all(`%${advertiserName}%`) as Record<string, unknown>[];
@@ -368,6 +397,72 @@ export function getPreviousJobAds(advertiserName: string, currentJobId: string):
     SELECT id FROM ads WHERE advertiser_name LIKE ? AND scrape_job_id != ?
   `).all(`%${advertiserName}%`, currentJobId) as { id: string }[];
   return new Set(rows.map((r) => r.id));
+}
+
+function rowToSavedAdvertiser(row: Record<string, unknown>): SavedAdvertiser {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    page_id: row.page_id ? String(row.page_id) : undefined,
+    country: String(row.country || 'US'),
+    created_at: String(row.created_at),
+    last_scraped_at: row.last_scraped_at ? String(row.last_scraped_at) : undefined,
+    last_scrape_count: Number(row.last_scrape_count || 0),
+    ad_count: Number(row.ad_count || 0),
+  };
+}
+
+export function listSavedAdvertisers(): SavedAdvertiser[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT s.*, COUNT(DISTINCT a.id) AS ad_count
+    FROM saved_advertisers s
+    LEFT JOIN ads a ON (
+      (s.page_id IS NOT NULL AND a.advertiser_page_id = s.page_id)
+      OR (s.page_id IS NULL AND a.advertiser_name = s.name COLLATE NOCASE)
+    )
+    GROUP BY s.id
+    ORDER BY COALESCE(s.last_scraped_at, s.created_at) DESC
+  `).all() as Record<string, unknown>[];
+  return rows.map(rowToSavedAdvertiser);
+}
+
+export function upsertSavedAdvertiser(input: {
+  name: string;
+  page_id?: string;
+  country?: string;
+  scrape_count: number;
+}) {
+  const db = getDb();
+  const name = input.name.trim();
+  const pageId = input.page_id?.trim() || null;
+  const country = input.country?.trim() || 'US';
+  const now = new Date().toISOString();
+  const byPage = pageId
+    ? db.prepare('SELECT id FROM saved_advertisers WHERE page_id = ? LIMIT 1').get(pageId) as { id: string } | undefined
+    : undefined;
+  const existing = byPage ?? db.prepare(
+    'SELECT id FROM saved_advertisers WHERE name = ? COLLATE NOCASE AND country = ? LIMIT 1'
+  ).get(name, country) as { id: string } | undefined;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE saved_advertisers
+      SET name = ?, page_id = COALESCE(?, page_id), country = ?, last_scraped_at = ?, last_scrape_count = ?
+      WHERE id = ?
+    `).run(name, pageId, country, now, input.scrape_count, existing.id);
+    return;
+  }
+
+  db.prepare(`
+    INSERT INTO saved_advertisers (id, name, page_id, country, created_at, last_scraped_at, last_scrape_count)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(crypto.randomUUID(), name, pageId, country, now, now, input.scrape_count);
+}
+
+export function deleteSavedAdvertiser(id: string) {
+  const db = getDb();
+  db.prepare('DELETE FROM saved_advertisers WHERE id = ?').run(id);
 }
 
 // Collections

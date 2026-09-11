@@ -4,7 +4,7 @@ A local, self-hosted tool for searching and analyzing the **public [Meta Ad Libr
 
 > **Open source — [Apache License 2.0](LICENSE).**
 
-> **No API key. No access token. No account.**
+> **Public-library search needs no API key, access token, or ad account.**
 > It drives a real headless browser (Playwright) against the public Ad Library, reads the same data the website does, and stores everything in a local SQLite file on your machine. Nothing leaves your computer.
 
 ---
@@ -64,6 +64,24 @@ Check the Meta ad activity of a whole list of companies at once, via a guided up
 - **Scope filters** per job: status, media types, platforms, and optional "fetch ad details".
 - Full **job control** — pause, resume, stop, archive, and delete — from both the job list and inside a job, with live status updates.
 - Job history with live progress, and exports for **company summaries** and **per-ad data (with details)** — both include each brand's matched **Facebook / Instagram username** and how it was matched.
+
+### 📊 Performance (optional own-account view)
+- A separate **Performance** tab reads your own Meta ad-account insights through Meta's official Ads CLI and Graph API.
+- It reports spend, the campaign's primary conversion event, cost per outcome, attributed revenue/ROAS where available, trend, budget mix, campaign health, and creative leaders.
+- Campaigns are compared against others using the same result type. Mixed objectives stay labelled as mixed instead of being blended into a misleading single CPA.
+- Use Today, Last 7 days, This month, Last 30 days, Last 90 days, or a custom date range. Switch the chart breakdown between daily, 7-day, and monthly views.
+- Filter to one or more campaigns; every KPI, chart, budget figure, decision card, and table recalculates for the selected campaigns and date range.
+
+To enable it, add these values to the scraper server's `.env.local` and restart the app:
+
+```bash
+ACCESS_TOKEN=your_read_only_meta_token
+AD_ACCOUNT_ID=act_123456789
+```
+
+The existing [meta-ads-kit](https://github.com/TheMattBerman/meta-ads-kit) checkout can provide those values instead by setting `META_KIT_DIR=/absolute/path/to/meta-ads-kit`. The Performance tab is read-only; public competitor-library scraping continues to use Playwright and does not require these credentials.
+
+The token is read by the server only and is never sent to the browser or stored in the scraper database. Use a token with Meta's read-only `ads_read` and `read_insights` permissions, and grant it access to the account in Ads Manager.
 
 ### 🪝 Real-time webhooks
 Optionally push scraped data to an external system as it's found — no polling, no exports to wire up.
@@ -125,8 +143,30 @@ npm start
 > **Binds to `127.0.0.1` by default — this is a single-user tool with no auth.**
 > There are no accounts and no authentication: every route (scraping, bulk jobs, tag/collection edits, the webhook test-fire) is open to whoever can reach the server. That's fine on your own machine, which is why `npm run dev` and `npm start` bind to loopback (`-H 127.0.0.1`) so nothing is exposed to your network. **If you deliberately run it on a VM/container and need remote access, change the host (`next start -H 0.0.0.0`) — but only behind your own auth layer** (a reverse proxy with a password, a VPN, or an SSH tunnel), never open to the internet.
 
-> **Deployment caveat — run this as a single long-lived Node process.**
-> The app is designed to run on one persistent server (local machine, a VM, or a single container). The rate limiter, adaptive backoff, the Meta-API health registry, and the warm typeahead browser all hold **in-memory, per-process** state. On a serverless platform (e.g. Vercel functions) where each request can hit a fresh, isolated instance, that shared state stops being global: every cold instance starts with an empty token bucket and no backoff history, so the global rate limiting and "Meta changed their API" tracking no longer hold across requests. Playwright driving a headless Chromium also doesn't fit typical serverless function limits. If you move off a single process, you'd need to externalise that state (e.g. Redis for the limiter/health) and run the browser on a dedicated worker.
+> **Hosted deployment shape:** Vercel serves the web UI, while the existing Next server runs as one long-lived worker with Playwright and a persistent `/data` volume. Set `SCRAPER_WORKER_URL` in the Vercel project; the app proxies `/api/*` to that worker, so scraping, SSE, rate limiting, SQLite, saved ads, notes, and the swipefile all keep their current behavior. Do not deploy the scraper API directly as Vercel Functions: the browser process and SQLite file need a persistent worker.
+
+### Vercel + worker deployment
+
+1. Deploy this repository as a long-lived service on Railway, Fly.io, or a small VM using the included `Dockerfile`. Mount a persistent volume at `/app/data`. The worker must expose port `3000` and use the included `npm run start:worker` command.
+2. Confirm the worker before connecting Vercel:
+
+   ```bash
+   curl https://YOUR-WORKER-DOMAIN/api/health
+   ```
+
+   It should return `{ "ok": true, "role": "worker", ... }`.
+
+3. Create a Vercel project from the same repository and add this build-time environment variable:
+
+   ```bash
+   SCRAPER_WORKER_URL=https://YOUR-WORKER-DOMAIN
+   ```
+
+   Redeploy after changing it. Vercel then serves the UI and forwards every `/api/*` request to the worker on the same origin.
+
+4. Put `ACCESS_TOKEN` and `AD_ACCOUNT_ID` on the worker only. They are not needed by Vercel, and the public Ad Library scraper still works without them.
+
+This is intentionally a single-worker deployment: it keeps the existing Playwright session, rate limiter, SSE streams, and SQLite database coherent. Saved ads remain in the worker's mounted `/app/data` volume even when the advertiser later stops running the ad. Continuous auto-discovery is not part of this path; scraping remains manual.
 
 ---
 
@@ -145,11 +185,12 @@ npm start
 ```
 src/
   app/
-    page.tsx              # Main UI (search / saved / bulk tabs)
+    page.tsx              # Main UI (search / swipefile / performance / bulk tabs)
     api/                  # Route handlers
       scrape/             # SSE keyword/advertiser search (stamps + webhooks the active session)
       bulk/               # Bulk jobs: start, stream (+ per-company webhook), control, export, results
       ads/                # Query (by saved/list/tag/session), save (+ session webhook), per-ad tags
+      analytics/          # Read-only own-account performance dashboard data
       tags/  collections/ # Tag & list CRUD
       sessions/           # Search-session CRUD (name, webhook, fire_on)
       webhook/test/       # Synchronous webhook test-fire

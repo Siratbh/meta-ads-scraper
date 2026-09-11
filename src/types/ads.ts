@@ -58,6 +58,7 @@ export interface Ad {
   demographic_distribution: DemographicEntry[];
   region_distribution: RegionEntry[];
   ad_snapshot_url?: string;
+  notes?: string;
   saved: boolean;
   collection_id?: string;
   session_id?: string;        // search session this ad was scraped under (when active)
@@ -168,6 +169,17 @@ export interface AdvertiserSuggestion {
   verified?: boolean;
   page_alias?: string;     // Facebook page handle, e.g. "snitch.co.in"
   ig_username?: string;    // Instagram handle, e.g. "snitch.in" (when Meta returns it)
+}
+
+export interface SavedAdvertiser {
+  id: string;
+  name: string;
+  page_id?: string;
+  country: string;
+  created_at: string;
+  last_scraped_at?: string;
+  last_scrape_count: number;
+  ad_count?: number;
 }
 
 export interface BulkJob {

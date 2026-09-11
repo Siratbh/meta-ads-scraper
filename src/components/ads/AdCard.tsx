@@ -264,7 +264,7 @@ export function AdCard({ ad, index = 0, onClick, onSave }: AdCardProps) {
               className={`h-6 w-6 ${ad.saved ? 'text-primary' : ''}`}
               onClick={handleSave}
               disabled={saving}
-              title={ad.saved ? 'Remove from saved' : 'Save'}
+              title={ad.saved ? 'Remove from swipefile' : 'Add to swipefile'}
             >
               {ad.saved ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
             </Button>

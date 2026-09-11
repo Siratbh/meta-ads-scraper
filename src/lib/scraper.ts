@@ -282,6 +282,7 @@ export async function* scrapeAds(
   // closed — otherwise the launched browser would leak with no ref to close it.
   let browser: import('playwright').Browser | undefined;
   let rawHtml = '';
+  let challengeSeen = false;
 
   try {
     const b = await launchBrowser(true);
@@ -296,6 +297,10 @@ export async function* scrapeAds(
     try {
       const url = response.url();
       const status = response.status();
+
+      if (response.request().method() === 'GET' && url.includes('ads/library') && status === 403) {
+        challengeSeen = true;
+      }
 
       // Block detection — Meta pushing back on Ad Library / GraphQL traffic.
       if ((url.includes('ads/library') || url.includes('/api/graphql')) && isBlockStatus(status)) {
@@ -423,6 +428,12 @@ export async function* scrapeAds(
     }
 
     console.log('[scraper] done, total:', collectedAds.length);
+    if (challengeSeen && collectedAds.length === 0) {
+      const message =
+        'Meta returned a browser verification challenge, so this run could not read the ad library. The result is not a genuine "0 ads" result. Use an authenticated scraper browser profile or proxy, then retry.';
+      recordDown('search', message);
+      throw new Error(message);
+    }
     // Any ads parsed means the ad_archive_id payload shape still works. We don't
     // mark search "down" on zero results — an empty page is also a valid "no
     // matches", which we can't reliably tell apart from a structure change here.

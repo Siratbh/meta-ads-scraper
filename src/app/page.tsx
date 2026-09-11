@@ -18,14 +18,15 @@ import { BulkUpload } from '@/components/ads/BulkUpload';
 import { BulkResultsTable } from '@/components/ads/BulkResultsTable';
 import { CompanyDrawer } from '@/components/ads/CompanyDrawer';
 import { AdvertiserSearch } from '@/components/ads/AdvertiserSearch';
+import { PerformanceDashboard } from '@/components/ads/PerformanceDashboard';
 import { ResultsFilterBar, EMPTY_RESULT_FILTERS, type ResultFilters } from '@/components/ads/ResultsFilterBar';
 import { Pagination } from '@/components/ads/Pagination';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { adsToCsv, exportFilename } from '@/lib/exportCsv';
-import type { Ad, SearchParams, Collection, Tag, BulkCompany, BulkJob, AdvertiserSuggestion, SearchSession } from '@/types/ads';
+import type { Ad, SearchParams, Collection, Tag, BulkCompany, BulkJob, AdvertiserSuggestion, SearchSession, SavedAdvertiser } from '@/types/ads';
 import {
   Search, BookMarked, Users, Zap, FolderPlus, Download,
-  Square, PanelLeftOpen, AlertTriangle, X, Webhook, Pause, ArrowLeft,
+  Square, PanelLeftOpen, AlertTriangle, X, Webhook, Pause, ArrowLeft, BarChart3,
 } from 'lucide-react';
 
 const DEFAULT_PARAMS: SearchParams = {
@@ -53,7 +54,7 @@ export default function HomePage() {
 
   // Scrape state
   const [scraping, setScraping] = useState(false);
-  const [scrapeCount, setScrapeCount] = useState(0);
+  const [, setScrapeCount] = useState(0);
   const [liveAds, setLiveAds] = useState<Ad[]>([]);
   const [, setActiveJobId] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -115,6 +116,11 @@ export default function HomePage() {
   });
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
 
+  const { data: savedAdvertisers = [] } = useQuery<SavedAdvertiser[]>({
+    queryKey: ['saved-advertisers'],
+    queryFn: () => fetch('/api/advertisers/saved').then((r) => r.json()),
+  });
+
   const { data: savedData, refetch: refetchSaved } = useQuery({
     queryKey: ['saved-ads', activeCollection, activeTag, savedSearch, sortBy],
     queryFn: () => {
@@ -132,6 +138,25 @@ export default function HomePage() {
     setKeyword('');
     setAdvertiser(s.name);
     startScrape({ page_id: s.page_id, advertiser: s.name, keyword: undefined });
+  }
+
+  function refreshSavedAdvertiser(a: SavedAdvertiser) {
+    setTab('search');
+    setKeyword('');
+    setAdvertiser(a.name);
+    setFilterParams((prev) => ({ ...prev, country: a.country }));
+    startScrape({ advertiser: a.name, page_id: a.page_id, country: a.country, keyword: undefined });
+  }
+
+  async function removeSavedAdvertiser(id: string) {
+    const saved = savedAdvertisers.find((a) => a.id === id);
+    if (!saved || !window.confirm(`Remove "${saved.name}" from saved advertisers? Its ads will be kept.`)) return;
+    await fetch('/api/advertisers/saved', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    queryClient.invalidateQueries({ queryKey: ['saved-advertisers'] });
   }
 
   async function startScrape(override?: Partial<SearchParams>) {
@@ -192,6 +217,7 @@ export default function HomePage() {
             if (event.type === 'done') setScraping(false);
             if (event.type === 'error') {
               console.error('Scrape error:', event.message);
+              setScrapeWarning(event.message);
               setScraping(false);
             }
           } catch { /* skip malformed */ }
@@ -201,6 +227,7 @@ export default function HomePage() {
       if ((e as Error).name !== 'AbortError') console.error(e);
     } finally {
       setScraping(false);
+      if (params.advertiser) queryClient.invalidateQueries({ queryKey: ['saved-advertisers'] });
     }
   }
 
@@ -218,6 +245,12 @@ export default function HomePage() {
     setLiveAds((prev) => prev.map((a) => (a.id === id ? { ...a, saved } : a)));
     if (activeSessionId) queryClient.invalidateQueries({ queryKey: ['sessions'] });
     if (tab === 'saved') refetchSaved();
+  }
+
+  function handleNotesChange(id: string, notes: string) {
+    setSelectedAd((prev) => prev?.id === id ? { ...prev, notes } : prev);
+    setLiveAds((prev) => prev.map((a) => a.id === id ? { ...a, notes } : a));
+    queryClient.invalidateQueries({ queryKey: ['saved-ads'] });
   }
 
   // Open Hook Lab — either on a specific curated set (list/session) or, with no
@@ -415,7 +448,7 @@ export default function HomePage() {
       const so = localStorage.getItem('mas_sort');
       const sid = localStorage.getItem('mas_session_id');
       /* eslint-disable react-hooks/set-state-in-effect */
-      if (t === 'search' || t === 'saved' || t === 'bulk') setTab(t);
+      if (t === 'search' || t === 'saved' || t === 'bulk' || t === 'performance') setTab(t);
       if (jid) setBulkJobId(jid);
       if (sf === '0') setShowFilters(false);
       if (fp) { try { setFilterParams({ ...DEFAULT_PARAMS, ...JSON.parse(fp) }); } catch { /* ignore */ } }
@@ -475,12 +508,25 @@ export default function HomePage() {
   });
 
   const newCount = filteredAds.filter((a) => a.is_new).length;
-  const displayAds = tab === 'saved' ? (savedData?.ads || []) : filteredAds;
+  const savedAds = (savedData?.ads || []) as Ad[];
+  const savedAdGroups = Array.from(
+    savedAds.reduce((groups, ad) => {
+      const name = ad.advertiser_name.trim() || 'Unknown advertiser';
+      const key = name.toLowerCase();
+      const group = groups.get(key);
+      if (group) group.ads.push(ad);
+      else groups.set(key, { name, ads: [ad] });
+      return groups;
+    }, new Map<string, { name: string; ads: Ad[] }>()).values()
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  const groupedSavedAds = savedAdGroups.filter((group) => group.ads.length > 1);
+  const ungroupedSavedAds = savedAdGroups.filter((group) => group.ads.length === 1).flatMap((group) => group.ads);
+  const displayAds = tab === 'saved' ? savedAds : filteredAds;
   const savedScopeLabel = activeCollection
     ? `List: ${collections.find((c) => c.id === activeCollection)?.name ?? 'List'}`
     : activeTag
     ? `Tag: ${tags.find((t) => t.id === activeTag)?.name ?? 'Tag'}`
-    : 'Saved ads';
+    : 'Swipefile';
 
   const SEARCH_PER_PAGE = 24;
   const searchTotalPages = Math.max(1, Math.ceil(filteredAds.length / SEARCH_PER_PAGE));
@@ -543,7 +589,10 @@ export default function HomePage() {
                 <Search className="w-3.5 h-3.5 mr-1" />Search
               </TabsTrigger>
               <TabsTrigger value="saved" className="text-xs">
-                <BookMarked className="w-3.5 h-3.5 mr-1" />Saved
+                <BookMarked className="w-3.5 h-3.5 mr-1" />Swipefile
+              </TabsTrigger>
+              <TabsTrigger value="performance" className="text-xs">
+                <BarChart3 className="w-3.5 h-3.5 mr-1" />Performance
               </TabsTrigger>
               <TabsTrigger value="bulk" className="text-xs">
                 <Users className="w-3.5 h-3.5 mr-1" />Bulk
@@ -669,6 +718,9 @@ export default function HomePage() {
                     onChange={setAdvertiser}
                     country={filterParams.country || 'US'}
                     onSelect={pickAdvertiser}
+                    savedAdvertisers={savedAdvertisers}
+                    onSelectSaved={refreshSavedAdvertiser}
+                    onDeleteSaved={removeSavedAdvertiser}
                     onEnter={() => startScrape()}
                   />
                   {scraping ? (
@@ -743,14 +795,14 @@ export default function HomePage() {
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 shrink-0">
-                    <h2 className="font-semibold">Saved Ads</h2>
+                    <h2 className="font-semibold">Swipefile</h2>
                     {savedData?.total > 0 && <Badge variant="secondary">{savedData.total}</Badge>}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="relative w-56 max-w-[40vw]">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                       <Input
-                        placeholder="Search saved ads..."
+                        placeholder="Search swipefile..."
                         value={savedSearch}
                         onChange={(e) => setSavedSearch(e.target.value)}
                         className="h-8 pl-8 text-xs"
@@ -817,13 +869,64 @@ export default function HomePage() {
                   </div>
                 )}
 
-                <AdGrid
-                  ads={savedData?.ads || []}
-                  loading={false}
-                  hasSearched={true}
-                  onAdClick={(ad) => { setSelectedAd(ad); setModalOpen(true); }}
-                  onSave={handleSave}
-                />
+                {savedAds.length === 0 ? (
+                  <AdGrid
+                    ads={[]}
+                    loading={false}
+                    hasSearched={true}
+                    onAdClick={(ad) => { setSelectedAd(ad); setModalOpen(true); }}
+                    onSave={handleSave}
+                  />
+                ) : (
+                  <div className="space-y-8">
+                    {groupedSavedAds.map((group) => (
+                      <section key={group.name.toLowerCase()} className="space-y-3">
+                        <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                          <h3 className="text-sm font-semibold">{group.name}</h3>
+                          <Badge variant="secondary" className="text-[10px]">{group.ads.length} ads</Badge>
+                        </div>
+                        <AdGrid
+                          ads={group.ads}
+                          loading={false}
+                          hasSearched={true}
+                          onAdClick={(ad) => { setSelectedAd(ad); setModalOpen(true); }}
+                          onSave={handleSave}
+                        />
+                      </section>
+                    ))}
+                    {ungroupedSavedAds.length > 0 && (
+                      <section className="space-y-3">
+                        {groupedSavedAds.length > 0 && (
+                          <div className="flex items-center gap-2 border-b border-border/50 pb-2">
+                            <h3 className="text-sm font-semibold">Other advertisers</h3>
+                            <Badge variant="secondary" className="text-[10px]">{ungroupedSavedAds.length}</Badge>
+                          </div>
+                        )}
+                        <AdGrid
+                          ads={ungroupedSavedAds}
+                          loading={false}
+                          hasSearched={true}
+                          onAdClick={(ad) => { setSelectedAd(ad); setModalOpen(true); }}
+                          onSave={handleSave}
+                        />
+                      </section>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* Bulk Tab */}
+            {tab === 'performance' && (
+              <motion.div
+                key="performance"
+                variants={tabVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+              >
+                <PerformanceDashboard />
               </motion.div>
             )}
 
@@ -877,7 +980,13 @@ export default function HomePage() {
       </main>
 
       {/* Overlays */}
-      <AdModal ad={selectedAd} open={modalOpen} onClose={() => setModalOpen(false)} />
+      <AdModal
+        key={selectedAd?.id ?? 'no-ad'}
+        ad={selectedAd}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onNotesChange={handleNotesChange}
+      />
 
       <CollectionsPanel
         open={collectionsOpen}

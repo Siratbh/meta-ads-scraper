@@ -2,15 +2,19 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
 import { Input } from '@/components/ui/input';
-import type { AdvertiserSuggestion } from '@/types/ads';
-import { Users, Loader2, BadgeCheck, AlertTriangle } from 'lucide-react';
+import type { AdvertiserSuggestion, SavedAdvertiser } from '@/types/ads';
+import { Users, Loader2, BadgeCheck, AlertTriangle, Bookmark, RefreshCw, Trash2 } from 'lucide-react';
 
 interface Props {
   value: string;
   onChange: (v: string) => void;
   country: string;
   onSelect: (s: AdvertiserSuggestion) => void;
+  savedAdvertisers: SavedAdvertiser[];
+  onSelectSaved: (advertiser: SavedAdvertiser) => void;
+  onDeleteSaved: (id: string) => void;
   onEnter: () => void;
 }
 
@@ -21,7 +25,7 @@ function compact(n?: number): string {
   return String(n);
 }
 
-export function AdvertiserSearch({ value, onChange, country, onSelect, onEnter }: Props) {
+export function AdvertiserSearch({ value, onChange, country, onSelect, savedAdvertisers, onSelectSaved, onDeleteSaved, onEnter }: Props) {
   const [debounced, setDebounced] = useState(value);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -59,6 +63,7 @@ export function AdvertiserSearch({ value, onChange, country, onSelect, onEnter }
   });
   const list = Array.isArray(suggestions) ? suggestions : [];
   const apiChanged = (error as (Error & { code?: string }) | null)?.code === 'META_API_CHANGED';
+  const savedMatches = savedAdvertisers.filter((a) => !q || a.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
     <div ref={ref} className="flex-1 relative">
@@ -72,11 +77,49 @@ export function AdvertiserSearch({ value, onChange, country, onSelect, onEnter }
         className="pl-9"
       />
 
-      {open && q.length >= 2 && (
+      {open && (q.length >= 2 || savedMatches.length > 0) && (
         <div className="absolute z-50 top-full mt-1 left-0 right-0 rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
-          <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wide border-b border-border/50 flex items-center gap-1.5">
-            Advertisers {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
-          </div>
+          {savedMatches.length > 0 && (
+            <>
+              <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wide border-b border-border/50 flex items-center gap-1.5">
+                <Bookmark className="w-3 h-3" /> Saved advertisers
+              </div>
+              <div className="max-h-64 overflow-y-auto border-b border-border/50">
+                {savedMatches.map((a) => (
+                  <div key={a.id} className="flex items-center gap-1 border-b border-border/30 last:border-0">
+                    <button
+                      onClick={() => { setOpen(false); onSelectSaved(a); }}
+                      className="flex items-center gap-3 min-w-0 flex-1 px-3 py-2 hover:bg-accent transition-colors text-left"
+                      title="Refresh this advertiser's ads"
+                    >
+                      <RefreshCw className="w-4 h-4 text-primary shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{a.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {a.last_scraped_at
+                            ? `${a.last_scrape_count.toLocaleString()} ads last scraped ${formatDistanceToNow(new Date(a.last_scraped_at), { addSuffix: true })}`
+                            : 'Ready to scrape'}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteSaved(a.id); }}
+                      className="p-2 mr-1 text-muted-foreground hover:text-red-400 transition-colors shrink-0"
+                      title="Remove saved advertiser"
+                      aria-label={`Remove ${a.name} from saved advertisers`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {q.length >= 2 && (
+            <>
+              <div className="px-3 py-1.5 text-[11px] font-medium text-muted-foreground uppercase tracking-wide border-b border-border/50 flex items-center gap-1.5">
+                Meta advertisers {isFetching && <Loader2 className="w-3 h-3 animate-spin" />}
+              </div>
           <div className="max-h-80 overflow-y-auto">
             {apiChanged && (
               <div className="flex items-start gap-2 px-3 py-3 text-xs text-amber-400 bg-amber-500/10 border-b border-amber-500/20">
@@ -136,6 +179,8 @@ export function AdvertiserSearch({ value, onChange, country, onSelect, onEnter }
               </p>
             )}
           </div>
+            </>
+          )}
         </div>
       )}
     </div>

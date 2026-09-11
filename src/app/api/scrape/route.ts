@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { scrapeAds } from '@/lib/scraper';
-import { upsertAd, createScrapeJob, completeScrapeJob, errorScrapeJob, getPreviousJobAds, getSearchSession, touchSearchSession } from '@/lib/db';
+import { upsertAd, createScrapeJob, completeScrapeJob, errorScrapeJob, getPreviousJobAds, getSearchSession, touchSearchSession, upsertSavedAdvertiser } from '@/lib/db';
 import { signalStatus } from '@/lib/metaHealth';
 import { totalBlockCount } from '@/lib/rateLimiter';
 import { deliverWebhook, buildAdvertiserCompany } from '@/lib/webhook';
@@ -86,6 +86,14 @@ export async function POST(req: NextRequest) {
         }
 
         if (session && total > 0) touchSearchSession(session.id);
+        if (params.advertiser && total > 0) {
+          upsertSavedAdvertiser({
+            name: params.advertiser,
+            page_id: params.page_id,
+            country: params.country,
+            scrape_count: total,
+          });
+        }
         completeScrapeJob(jobId, total);
         send({ type: 'done', total, job_id: jobId });
       } catch (err) {

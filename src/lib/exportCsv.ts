@@ -8,7 +8,7 @@ export const AD_CSV_HEADER = [
   'ID', 'Advertiser', 'Advertiser Page ID', 'Status', 'Category', 'Media Type', 'Ad Copy', 'Headline', 'CTA',
   'Landing URL', 'Image URLs', 'Video URLs', 'Platforms', 'Started', 'Stopped', 'Days Running',
   'Spend Min', 'Spend Max', 'Impressions Min', 'Impressions Max',
-  'Funding Entity', 'Ad Library URL', 'Country', 'Language', 'Tags', 'Scraped At',
+  'Funding Entity', 'Ad Library URL', 'Country', 'Language', 'Tags', 'Notes', 'Scraped At',
   'Details Fetched', 'Total Reach (EU)', 'Beneficiary', 'Payer',
   'Top Regions', 'Age/Gender Breakdown',
 ].map((h) => `"${h}"`).join(',');
@@ -52,6 +52,7 @@ export function adToCsvRow(ad: Ad): string {
     ad.country || '',
     ad.language || '',
     (ad.tags ?? []).map((t) => t.name).join(', '),
+    ad.notes || '',
     ad.scraped_at,
     // "See ad details" / EU transparency
     ad.detail_fetched ? 'yes' : '',

@@ -20,11 +20,12 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>('dark');
   const [mounted, setMounted] = useState(false);
 
-  // Read the theme the pre-paint script already committed, so the icon matches
-  // what's on screen on first render.
+  // Read the theme the pre-paint script already committed after hydration.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
     setMounted(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const toggle = () => {
@@ -36,12 +37,10 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      title={mounted ? `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode` : 'Toggle theme'}
+      title={mounted ? `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode` : 'Toggle color theme'}
       aria-label="Toggle color theme"
       className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
     >
-      {/* Render both until mounted to avoid a hydration mismatch, then show the
-          one that flips to the *other* mode. */}
       {mounted && theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
     </button>
   );
